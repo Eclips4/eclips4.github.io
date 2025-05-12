@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Python REPL</title>
+    <script src="https://cdn.jsdelivr.net/npm/jquery"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery.terminal@2.35.2/js/jquery.terminal.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/jquery.terminal@2.35.2/css/jquery.terminal.min.css" rel="stylesheet" />
+    <style>
+      body {
+        background: black;
+        color: white;
+      }
+      .terminal {
+        --size: 1.2;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script type="module">
+      import { loadPyodide } from 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.mjs';
+
+      const pyodide = await loadPyodide({
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/',
+      });
+
+      const { PyodideConsole } = pyodide.pyimport('pyodide.console');
+      const pyconsole = PyodideConsole(pyodide.globals);
+
+      const await_fut = pyodide.runPython(`
+        import builtins
+        from pyodide.ffi import to_js
+        async def await_fut(fut):
+            res = await fut
+            if res is not None:
+                builtins._ = res
+            return to_js([res])
+        await_fut
+      `);
+
+      $('#terminal').terminal(async (command) => {
+        if (!command.trim()) return;
+        const fut = pyconsole.push(command);
+        const result = await await_fut(fut);
+        if (result[0] !== undefined) {
+          const str = pyodide.runPython(`repr(_)`);
+          term.echo(str);
+        }
+        fut.destroy();
+      }, {
+        greetings: `🐍 Pyodide ${pyodide.version} Terminal`,
+        prompt: '>>> ',
+        name: 'pyodide-repl',
+        height: 400,
+        completion: function (cmd, callback) {
+          const completions = pyconsole.complete(cmd).toJs()[0];
+          callback(completions);
+        }
+      });
+
+      const term = $('#terminal').terminal();
+      pyconsole.stdout_callback = (s) => term.echo(s, { newline: false });
+      pyconsole.stderr_callback = (s) => term.error(s.trimEnd());
+    </script>
+  </body>
+</html>
+
+
